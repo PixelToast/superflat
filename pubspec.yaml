@@ -12,6 +12,7 @@ dependencies:
   uuid: any
   mime: any
   crypto: ^2.1.3
+  vector_math: any
 #  path: ^1.6.0
 
 dev_dependencies:

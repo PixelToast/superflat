@@ -7,16 +7,10 @@ import 'dart:js';
 import 'dart:math';
 import 'dart:svg' hide ImageElement;
 
+import 'package:superflat/image_viewer.dart';
+import 'package:superflat/modal.dart';
 import 'package:tuple/tuple.dart';
 import 'package:js/js.dart';
-
-class GalleryImage {
-  GalleryImage(this.width, this.height, this.thumb, this.src);
-  int width;
-  int height;
-  String thumb;
-  String src;
-}
 
 @JS("isIntersecting")
 external bool isIntersecting(dynamic obj);
@@ -103,60 +97,19 @@ Future<void> startLayout() async {
     bodyBg.children = [e];
   }
 
-  var images = <GalleryImage>[];
-
+  var images = <GalleryContent>[];
+  var modal = Modal(body);
   var conf = jsonDecode(await HttpRequest.getString("/images.json"));
 
   for (var id in conf["feed"]) {
     var img = conf["pool"][id];
-    images.add(GalleryImage(
-      img["width"],
-      img["height"],
-      img["thumb"],
-      img["src"],
-    ));
+    images.add(GalleryContent.fromJson(img));
   }
 
   const imgHeight = 200;
 
   var loadedThumbs = <String>{};
   var observers = <IntersectionObserver>{};
-
-  bool modalOpen = false;
-  bool modalClosing = false;
-
-  void closeModal() async {
-    if (!modalOpen || modalClosing) return;
-    var modal = querySelector("#modal");
-    modal.style.opacity = "0";
-    modalClosing = true;
-    await Future.delayed(Duration(milliseconds: 200));
-    modal.remove();
-    modalClosing = false;
-    modalOpen = false;
-  }
-
-  void showModal(String src) async {
-    if (modalOpen) return;
-
-    body.children.add(DivElement()
-      ..id = "modal"
-      ..children.add(
-        ImageElement()
-          ..id = "modal-image"
-          ..src = src
-          ..onLoad.listen((e) {
-            (e.target as Element).style.opacity = "1";
-          })
-      )
-      ..onClick.listen((_) => closeModal())
-    );
-
-    modalOpen = true;
-
-    await Future.delayed(Duration.zero);
-    querySelector("#modal").style.opacity = "1";
-  }
 
   void renderGallery() {
     observers.forEach((e) => e.disconnect());
@@ -170,7 +123,7 @@ Future<void> startLayout() async {
     var widths = <double>[];
 
     for (var i in images) {
-      var estWidth = min(imgHeight * 2, imgHeight * (i.width / i.height)) + imgPadding;
+      var estWidth = min(imgHeight * 2, imgHeight * (i.meta.width / i.meta.height)) + imgPadding;
       widths.add(estWidth);
     }
 
@@ -224,19 +177,18 @@ Future<void> startLayout() async {
 
         var div = DivElement();
 
-        var thumb = images[img.item2].thumb;
+        var cn = images[img.item2];
 
+        var thumb = cn.meta.thumb;
         if (loadedThumbs.contains(thumb)) {
           div.style.backgroundImage = "url('${thumb}')";
           div.classes.add("visible");
         } else {
           IntersectionObserver observer;
           observer = IntersectionObserver((l, _2) {
-            //(context["console"] as JsObject).callMethod("log", [l[0]]);
             if (l.length == 1 && !isIntersecting(l[0])) return;
             observer.disconnect();
             observers.remove(observer);
-            print("observf ${l.length}");
             div.style.backgroundImage = "url('${thumb}')";
             (ImageElement()..src = thumb).onLoad.first.then((_) {
               loadedThumbs.add(thumb);
@@ -246,12 +198,32 @@ Future<void> startLayout() async {
           observers.add(observer);
         }
 
+        if (cn is GalleryImage && cn.mime.split("/")[0] == "video") {
+          div.children.add(DivElement()
+            ..classes.add("gallery-img-overlay")
+            ..children.add(ImageElement()
+              ..src = "assets/play.svg"
+              ..style.width = "64px"
+              ..style.height = "64px"
+            )
+          );
+        } else if (cn is GalleryImage && cn.mime == "image/gif") {
+          div.children.add(DivElement()
+            ..classes.add("gallery-img-overlay")
+            ..children.add(ImageElement()
+              ..src = "assets/gif.svg"
+              ..style.width = "64px"
+              ..style.height = "64px"
+            )
+          );
+        }
+
         rdiv.children.add(div
           ..classes.add("gallery-img")
           ..style.width = "${w}px"
           ..style.height = "${imgHeight}px"
           ..style.margin = "${imgPadding}px"
-          ..onClick.listen((_) => showModal(images[img.item2].src))
+          ..onClick.listen((_) => modal.showContent(cn))
         );
       }
 

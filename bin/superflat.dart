@@ -49,48 +49,60 @@ Future<Tuple2<int, int>> imgSize(String path) async {
   return Tuple2(int.parse(match.group(1)), int.parse(match.group(2)));
 }
 
-Future<List<int>> makeThumbnail(String path) async {
-  var proc = await Process.start("C:\\Program Files\\ImageMagick-7.0.9-Q16\\magick.exe", [
-    "-define", "jpg:size=800x400", "-background", "#404040", "web/$path", "-thumbnail", "400x200>", "-"
-  ]);
+Future<List<int>> convert(List<String> args, [List<int> data]) async {
+  var proc = await Process.start("C:\\Program Files\\ImageMagick-7.0.9-Q16\\magick.exe", args);
+
+  if (data != null) {
+    proc.stdin.add(data);
+    proc.stdin.close();
+  }
+
   stderr.addStream(proc.stderr);
   return proc.stdout.expand((e) => e).toList();
 }
 
+Future<List<int>> makeThumbnail(List<String> mime, String path) async {
+  if (mime[0] == "video" || mime[1] == "gif") {
+    return convert(["-background", "#404040", "web/$path[0]", "-resize", "400x200>", "jpeg:-"]);
+  } else if (mime[0] == "image") {
+    return convert(["-background", "#404040", "web/$path", "-thumbnail", "400x200>", "-"]);
+  } else throw "Unknown kind: '${mime[0]}'";
+}
+
 void main(List<String> args) async {
-  var kind = args[0];
-  if (kind == "image") {
-    var config = await getConfig();
-    var imgData = await getFile(args[1].replaceAll("\\", "/"));
-    var id = md5.convert(imgData).toString();
+  if (args.length != 1) throw "Wrong number of arguments";
 
-    config["feed"] ??= [];
-    config["pool"] ??= {};
-    if (config["pool"][id] != null) throw "Image already exists;";
+  var config = await getConfig();
+  var imgData = await getFile(args[0].replaceAll("\\", "/"));
+  print("Done!");
+  var id = md5.convert(imgData).toString();
 
-    var imgExtension = lookupMimeType(args[1], headerBytes: imgData).split("/")[1];
+  config["feed"] ??= [];
+  config["pool"] ??= {};
+  if (config["pool"][id] != null) throw "Image already exists;";
 
-    await mkDir("content/$id");
-    await writeFile("content/$id/full.$imgExtension", imgData);
+  var mime = lookupMimeType(args[0], headerBytes: imgData).split("/");
 
-    var thumbailData = await makeThumbnail("content/$id/full.$imgExtension");
+  await mkDir("content/$id");
+  await writeFile("content/$id/full.${mime[1]}", imgData);
 
-    if (thumbailData.isEmpty) throw "Failed to make thumbnail";
-    await writeFile("content/$id/thumb.jpg", thumbailData);
+  var thumbailData = await makeThumbnail(mime, "content/$id/full.${mime[1]}");
 
-    var size = await imgSize("content/$id/full.$imgExtension");
+  if (thumbailData.isEmpty) throw "Failed to make thumbnail";
+  await writeFile("content/$id/thumb.jpg", thumbailData);
 
-    config["feed"].add(id);
+  var size = await imgSize("content/$id/full.${mime[1]}");
 
-    config["pool"][id] = {
-      "width": size.item1,
-      "height": size.item2,
-      "src": "/content/$id/full.$imgExtension",
-      "thumb": "/content/$id/thumb.jpg",
-    };
+  config["feed"].add(id);
 
-    await writeConfig(config);
-  } else {
-    throw "Unknown kind '$kind'";
-  }
+  config["pool"][id] = {
+    "kind": "image",
+    "width": size.item1,
+    "height": size.item2,
+    "src": "/content/$id/full.${mime[1]}",
+    "mime": mime.join("/"),
+    "thumb": "/content/$id/thumb.jpg",
+  };
+
+  await writeConfig(config);
 }
