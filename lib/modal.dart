@@ -1,6 +1,8 @@
 import 'dart:html';
+import 'dart:typed_data';
 
 import 'package:superflat/image_viewer.dart';
+import 'package:superflat/scene_viewer.dart';
 import 'package:vector_math/vector_math_64.dart';
 
 class GalleryMeta {
@@ -28,6 +30,8 @@ abstract class GalleryContent {
     var kind = data["kind"];
     if (kind == "image") {
       return GalleryImage.fromJson(data);
+    } else if (kind == "scene") {
+      return GalleryScene.fromJson(data);
     }
 
     throw "Unknown gallery kind '$kind'";
@@ -49,38 +53,72 @@ class GalleryImage extends GalleryContent {
 }
 
 class GalleryScene extends GalleryContent {
+  String cubemap;
+  List<GalleryModel> models;
+
   GalleryScene(this.cubemap, this.models, GalleryMeta meta) : super(meta);
 
-  TextureSource cubemap;
-  List<GalleryModel> models;
+  factory GalleryScene.fromJson(data) =>
+    GalleryScene(
+      data["cubemap"],
+      (data["models"] as List).map((e) => GalleryModel.fromJson(e)).toList(),
+      GalleryMeta.fromJson(data),
+    );
+}
+
+List<double> _doubles(dynamic data, int count) {
+  var o = Float64List(count);
+  for (int i = 0; i < count; i++) {
+    o[i] = (data[i] as num).toDouble();
+  }
+  return o;
+}
+
+Vector3 _vector3(dynamic data) => Vector3.fromFloat64List(_doubles(data, 3));
+
+dynamic uniformFromJson(dynamic data) {
+  var kind = data["kind"];
+
+  if (kind == "image") {
+    return data["src"];
+  } else if (kind == "double") {
+    return (data["value"] as num).toDouble();
+  } else if (kind == "vec3") {
+    return _vector3(data["buf"]);
+  } else if (kind == "vec4") {
+    return Vector3.fromFloat64List(_doubles(data["buf"], 4));
+  } else if (kind == "mat3") {
+    return Matrix3.fromList(_doubles(data["buf"], 9));
+  } else if (kind == "mat4") {
+    return Matrix4.fromFloat64List(_doubles(data["buf"], 16));
+  }
 }
 
 class GalleryModel {
+  String obj;
   Vector3 pos;
   Vector3 rot;
-  String obj;
-  List<MaterialSource> mats;
-}
+  Vector3 scale;
+  String fragShader;
+  String vertShader;
+  Map<String, dynamic> uniforms;
 
-enum TextureChannel {
-  RGB, R, G, B,
-}
+  GalleryModel(
+    this.obj, this.pos, this.rot, this.scale,
+    this.fragShader, this.vertShader, this.uniforms
+  );
 
-class TextureSource {
-  String src;
-  TextureChannel channel;
-  bool sRGB;
-  double brightness;
-  double gamma;
-  double contrast;
-}
-
-class MaterialSource {
-  TextureSource albeto;
-  TextureSource normal;
-  TextureSource metallic;
-  TextureSource roughness;
-  TextureSource occlusion;
+  factory GalleryModel.fromJson(data) =>
+    GalleryModel(
+      data["obj"],
+      _vector3(data["pos"]),
+      _vector3(data["rot"]),
+      _vector3(data["scale"]),
+      data["fragShader"],
+      data["vertShader"],
+      (data["uniforms"] as Map<String, dynamic>)
+        .map((k, v) => MapEntry(k, uniformFromJson(v)))
+    );
 }
 
 class Modal {
@@ -113,6 +151,8 @@ class Modal {
   Future<void> showContent(GalleryContent content) {
     if (content is GalleryImage) {
       return show(ImageViewer(content));
+    } else if (content is GalleryScene) {
+      return show(SceneViewer(content));
     }
     throw "Unknown content '${content.runtimeType}'";
   }

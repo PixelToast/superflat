@@ -216,6 +216,15 @@ Future<void> startLayout() async {
               ..style.height = "64px"
             )
           );
+        } else if (cn is GalleryScene) {
+          div.children.add(DivElement()
+            ..classes.add("gallery-img-overlay")
+            ..children.add(ImageElement()
+              ..src = "assets/cube.svg"
+              ..style.width = "48px"
+              ..style.height = "48px"
+            )
+          );
         }
 
         rdiv.children.add(div
