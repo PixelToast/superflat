@@ -3,6 +3,7 @@ import 'dart:html';
 import 'package:superflat/gl.dart';
 import 'package:superflat/mesh.dart';
 import 'package:superflat/modal.dart';
+import 'package:superflat/sprite.dart';
 
 class SceneViewer extends Viewer {
   GalleryScene scene;
@@ -18,7 +19,11 @@ class SceneViewer extends Viewer {
       ..style.height = "768px"
       ..style.backgroundColor = scene.meta.color;
 
+    modal.div.children.add(e);
+
     app = GLApp(e);
+    await app.init();
+
     var ctx = app.viewport;
 
     for (var m in scene.models) {
@@ -35,9 +40,12 @@ class SceneViewer extends Viewer {
           await ctx.loadObj(m.obj),
           BasicMaterial(
             await ctx.loadShader(m.vertShader, m.fragShader),
-            uniforms,
+            uniforms: uniforms,
           ),
         )
+          ..pos = m.pos
+          ..ang = m.ang
+          ..scale = m.scale
       );
     }
 
@@ -46,10 +54,8 @@ class SceneViewer extends Viewer {
       "/assets/gl/tonemap/frag.glsl",
     )));
 
-    await app.init();
-    app.draw();
+    app.start();
 
-    modal.div.children.add(e);
     e.style.opacity = "1";
   }
 

@@ -9,8 +9,8 @@ class SpriteGLObject extends GLObject {
   List<String> fragAssets;
 
   SpriteGLObject(this.texture, {this.matrix,
-    this.vertAssets = const ["shader/sprite/vert.glsl"],
-    this.fragAssets = const ["shader/sprite/frag.glsl"]
+    this.vertAssets = const ["/assets/gl/sprite/vert.glsl"],
+    this.fragAssets = const ["/assets/gl/sprite/frag.glsl"]
   }) {
     matrix ??= Matrix4.identity();
   }

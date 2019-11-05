@@ -74,7 +74,12 @@ List<double> _doubles(dynamic data, int count) {
   return o;
 }
 
-Vector3 _vector3(dynamic data) => Vector3.fromFloat64List(_doubles(data, 3));
+Vector3 _vector3(dynamic data) {
+  print("eee");
+  var o = Vector3.fromFloat64List(_doubles(data, 3));
+  print(o);
+  return o;
+}
 
 dynamic uniformFromJson(dynamic data) {
   var kind = data["kind"];
@@ -97,14 +102,14 @@ dynamic uniformFromJson(dynamic data) {
 class GalleryModel {
   String obj;
   Vector3 pos;
-  Vector3 rot;
+  Vector3 ang;
   Vector3 scale;
   String fragShader;
   String vertShader;
   Map<String, dynamic> uniforms;
 
   GalleryModel(
-    this.obj, this.pos, this.rot, this.scale,
+    this.obj, this.pos, this.ang, this.scale,
     this.fragShader, this.vertShader, this.uniforms
   );
 
@@ -112,7 +117,7 @@ class GalleryModel {
     GalleryModel(
       data["obj"],
       _vector3(data["pos"]),
-      _vector3(data["rot"]),
+      _vector3(data["ang"]),
       _vector3(data["scale"]),
       data["fragShader"],
       data["vertShader"],
@@ -135,6 +140,7 @@ class Modal {
   DivElement div;
   bool open = false;
   bool closing = false;
+  Viewer viewer;
 
   void close() async {
     if (!open || closing) return;
@@ -146,6 +152,8 @@ class Modal {
     div = null;
     closing = false;
     open = false;
+    viewer.close();
+    viewer = null;
   }
 
   Future<void> showContent(GalleryContent content) {
@@ -174,6 +182,7 @@ class Modal {
     await Future.delayed(Duration.zero);
     modal.style.opacity = "1";
     viewer.modal = this;
+    this.viewer = viewer;
     await viewer.show();
   }
 }

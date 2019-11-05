@@ -232,7 +232,7 @@ class GLApp {
     if (webglExt.containsKey(name)) return webglExt[name];
     var ext = glJs.callMethod("getExtension", [name]);
     if (ext == null) throw "Could not load extension '$name'";
-    print("Loaded extension '$name'");
+    print("Loaded WebGL extension '$name'");
     webglExt[name] = ext as JsObject;
     return ext;
   }
@@ -247,6 +247,7 @@ class GLApp {
     framebuffer = gl.createFramebuffer();
 
     depthTex = gl.createTexture();
+
     gl.bindTexture(WebGL.TEXTURE_2D, depthTex);
     gl.texImage2D(WebGL.TEXTURE_2D, 0, WebGL.DEPTH_COMPONENT, viewport.width, viewport.height, 0, WebGL.DEPTH_COMPONENT, WebGL.UNSIGNED_SHORT);
     gl.texParameteri(WebGL.TEXTURE_2D, WebGL.TEXTURE_MAG_FILTER, WebGL.NEAREST);
@@ -285,9 +286,9 @@ class GLApp {
     gl.bindTexture(WebGL.TEXTURE_2D, tex);
 
     gl.texImage2D(
-        WebGL.TEXTURE_2D, 0, WebGL.RGBA,
-        viewport.width, viewport.height, 0,
-        WebGL.RGBA, webglExt["OES_texture_half_float"]["HALF_FLOAT_OES"], null
+      WebGL.TEXTURE_2D, 0, WebGL.RGBA,
+      viewport.width, viewport.height, 0,
+      WebGL.RGBA, webglExt["OES_texture_half_float"]["HALF_FLOAT_OES"], null
     );
 
     gl.texParameteri(WebGL.TEXTURE_2D, WebGL.TEXTURE_WRAP_S, WebGL.CLAMP_TO_EDGE);
@@ -297,8 +298,8 @@ class GLApp {
   }
 
   void updateSize() {
-    canvas.width = canvas.clientWidth;
-    canvas.height = canvas.clientHeight;
+    canvas.width = canvas.clientWidth * 2;
+    canvas.height = canvas.clientHeight * 2;
     viewport.width = (canvas.width * oversample).round();
     viewport.height = (canvas.height * oversample).round();
     updateFramebufferSize(framebufferTex);
@@ -312,47 +313,47 @@ class GLApp {
   bool drawing = false;
 
   void draw() {
-    print("draw()");
     if (canvas == null) return;
-    viewport.mvMatrix = Matrix4.identity();
-    var now = DateTime.now().millisecondsSinceEpoch;
-    for (var obj in objects) obj.tick((now - lastDraw) / 1000);
-    lastDraw = now;
 
-    gl.bindFramebuffer(WebGL.FRAMEBUFFER, framebuffer);
-    gl.framebufferTexture2D(WebGL.FRAMEBUFFER, WebGL.COLOR_ATTACHMENT0, WebGL.TEXTURE_2D, framebufferTex, 0);
-    gl.framebufferTexture2D(WebGL.FRAMEBUFFER, WebGL.DEPTH_ATTACHMENT, WebGL.TEXTURE_2D, depthTex, 0);
+    if (canvas.width != 0 && canvas.height != 0) {
+      viewport.mvMatrix = Matrix4.identity();
+      var now = DateTime.now().millisecondsSinceEpoch;
+      for (var obj in objects) obj.tick((now - lastDraw) / 1000);
+      lastDraw = now;
 
-    gl.enable(WebGL.DEPTH_TEST);
-    viewport.draw();
-    for (var obj in objects) obj.draw();
+      gl.bindFramebuffer(WebGL.FRAMEBUFFER, framebuffer);
+      gl.framebufferTexture2D(WebGL.FRAMEBUFFER, WebGL.COLOR_ATTACHMENT0, WebGL.TEXTURE_2D, framebufferTex, 0);
+      gl.framebufferTexture2D(WebGL.FRAMEBUFFER, WebGL.DEPTH_ATTACHMENT, WebGL.TEXTURE_2D, depthTex, 0);
 
-    var a = framebufferTex;
-    var b = framebufferTex2;
-    for (var filt in filters) {
-      if (filt == filters.last) {
-        gl.bindFramebuffer(WebGL.FRAMEBUFFER, null);
-        gl.viewport(0, 0, canvas.width, canvas.height);
-        gl.clearColor(1, 0.4, 1, 1);
-        gl.clear(WebGL.COLOR_BUFFER_BIT | WebGL.DEPTH_BUFFER_BIT);
-      } else {
-        gl.framebufferTexture2D(WebGL.FRAMEBUFFER, WebGL.COLOR_ATTACHMENT0, WebGL.TEXTURE_2D, a, 0);
-        gl.framebufferTexture2D(WebGL.FRAMEBUFFER, WebGL.DEPTH_ATTACHMENT, WebGL.TEXTURE_2D, depthTex, 0);
+      gl.enable(WebGL.DEPTH_TEST);
+      viewport.draw();
+      for (var obj in objects) obj.draw();
+
+      var a = framebufferTex;
+      var b = framebufferTex2;
+      for (var filt in filters) {
+        if (filt == filters.last) {
+          gl.bindFramebuffer(WebGL.FRAMEBUFFER, null);
+          gl.viewport(0, 0, canvas.width, canvas.height);
+          gl.clearColor(1, 0.4, 1, 1);
+          gl.clear(WebGL.COLOR_BUFFER_BIT | WebGL.DEPTH_BUFFER_BIT);
+        } else {
+          gl.framebufferTexture2D(WebGL.FRAMEBUFFER, WebGL.COLOR_ATTACHMENT0, WebGL.TEXTURE_2D, a, 0);
+          gl.framebufferTexture2D(WebGL.FRAMEBUFFER, WebGL.DEPTH_ATTACHMENT, WebGL.TEXTURE_2D,depthTex, 0);
+        }
+
+        filt.texture = a;
+        filt.draw();
+
+        var t = b;
+        b = a;
+        a = t;
       }
-
-      filt.texture = a;
-      filt.draw();
-
-      var t = b;
-      b = a;
-      a = t;
     }
 
     if (drawing) window.animationFrame.then((_) {
       draw();
     });
-
-    print("frame done");
   }
 
   void start() {
@@ -363,7 +364,8 @@ class GLApp {
   }
 
   void destroy() {
-    // TODO: Do a better job of cleaning up textures
+    // TODO: Do a better job of cleaning up buffers
+    drawing = false;
     canvas = null;
     resizeObserver.disconnect();
   }

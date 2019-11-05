@@ -1,9 +1,10 @@
 import 'dart:html';
 import 'dart:js';
+import 'dart:typed_data';
 import 'dart:web_gl';
 
 import 'package:superflat/gl.dart';
-import 'package:vector_math/vector_math.dart';
+import 'package:vector_math/vector_math_64.dart';
 
 abstract class GLMaterial {
   GLViewport ctx;
@@ -15,18 +16,24 @@ class BasicMaterial extends GLMaterial {
   GLShader shader;
   Map<String, dynamic> uniforms;
 
-  BasicMaterial(this.shader, this.uniforms);
+  BasicMaterial(this.shader, {this.uniforms = const {}});
 
   draw(GLViewport ctx) {
     var gl = ctx.gl;
     gl.useProgram(shader.program);
 
-    var tex = WebGL.TEXTURE0;
+    gl.uniformMatrix4fv(shader.uniforms['uPMatrix'], false, ctx.pMatrix.storage);
+    gl.uniformMatrix4fv(shader.uniforms['uMVMatrix'], false, ctx.mvMatrix.storage);
 
+    var tex = WebGL.TEXTURE0;
     for (var u in uniforms.keys) {
       var v = uniforms[u];
+      if (!shader.uniforms.containsKey(u)) {
+        // print("Warning: inactive uniform $u");
+        continue;
+      }
       if (v is Texture) {
-        gl.activeTexture(WebGL.TEXTURE0);
+        gl.activeTexture(tex);
         gl.bindTexture(WebGL.TEXTURE_2D, v);
         gl.uniform1i(shader.uniforms[u], 0);
         tex = tex + 1;
@@ -40,7 +47,7 @@ class BasicMaterial extends GLMaterial {
         gl.uniformMatrix3fv(shader.uniforms[u], false, v.storage);
       } else if (v is Matrix4) {
         gl.uniformMatrix4fv(shader.uniforms[u], false, v.storage);
-      }
+      } else throw "Unknown uniform type: '${v.runtimeType}'";
     }
   }
 }
@@ -53,22 +60,9 @@ class MeshGLObject extends GLObject {
 
   Vector3 pos = Vector3.zero();
   Vector3 ang = Vector3.zero();
-  Vector3 scale = Vector3.zero();
+  Vector3 scale = Vector3(1, 1, 1);
 
-  init() async {
-    var gl = ctx.gl;
-    var glJs = ctx.glJs;
-
-    (glJs["bindBuffer"] as JsFunction).apply([WebGL.ARRAY_BUFFER, obj["vertexBuffer"]], thisArg: glJs);
-    gl.vertexAttribPointer(mat.shader.attributes["aVertexPosition"], obj["vertexBuffer"]["itemSize"], WebGL.FLOAT, false, 0, 0);
-
-    (glJs["bindBuffer"] as JsFunction).apply([WebGL.ARRAY_BUFFER, obj["textureBuffer"]], thisArg: glJs);
-    gl.vertexAttribPointer(mat.shader.attributes["aTexCoord"], obj["textureBuffer"]["itemSize"], WebGL.FLOAT, false, 0, 0);
-
-    (context["OBJ"]["initMeshBuffers"] as JsFunction).apply([
-      ctx.glJs, obj
-    ]);
-  }
+  double tdt = 0.0;
 
   draw() {
     var gl = ctx.gl;
@@ -76,9 +70,19 @@ class MeshGLObject extends GLObject {
     super.draw();
 
     ctx.mvPush();
-    ctx.mvMatrix.add(Matrix4.compose(pos, Quaternion.euler(ang.x, ang.y, ang.z), scale));
+    ctx.mvMatrix.translate(pos.x, pos.y, pos.z);
+    ctx.mvMatrix.scale(scale.x, scale.y, scale.z);
+    ctx.mvMatrix.rotateX(ang.x);
+    ctx.mvMatrix.rotateZ(ang.y);
+    ctx.mvMatrix.rotateZ(ang.z);
 
     mat.draw(ctx);
+
+    (glJs["bindBuffer"] as JsFunction).apply([WebGL.ARRAY_BUFFER, obj["vertexBuffer"]], thisArg: glJs);
+    gl.vertexAttribPointer(mat.shader.attributes["aVertexPosition"], obj["vertexBuffer"]["itemSize"], WebGL.FLOAT, false, 0, 0);
+
+    (glJs["bindBuffer"] as JsFunction).apply([WebGL.ARRAY_BUFFER, obj["textureBuffer"]], thisArg: glJs);
+    gl.vertexAttribPointer(mat.shader.attributes["aTexCoord"], obj["textureBuffer"]["itemSize"], WebGL.FLOAT, false, 0, 0);
 
     (glJs["bindBuffer"] as JsFunction).apply([WebGL.ELEMENT_ARRAY_BUFFER, obj["indexBuffer"]], thisArg: glJs);
     gl.drawElements(WebGL.TRIANGLES, obj["indexBuffer"]["numItems"], WebGL.UNSIGNED_SHORT, 0);
